@@ -20,6 +20,20 @@ namespace SendgridTwilioGateway.Services
             get => Environment.GetEnvironmentVariable("SENDGRID_APIKEY") ?? "";
         }
 
+       public static SendGridMessage CreateMessage(
+           EmailAddress from,
+           IEnumerable<EmailAddress> tos,
+           IEnumerable<EmailAddress> ccs,
+           IEnumerable<EmailAddress> bccs)
+        {
+            var msg = new SendGridMessage();
+            msg.SetFrom(from);
+            msg.AddTos(tos.ToList());
+            foreach (var cc in ccs) msg.AddCc(cc);
+            foreach (var bcc in bccs) msg.AddBcc(bcc);
+            return msg;
+        }
+
         private static async Task<HttpResponseMessage> GetRemoteFile(string uri)
         {
             var client = new HttpClient();
@@ -30,66 +44,36 @@ namespace SendgridTwilioGateway.Services
             });
         }
 
-        private static byte[] GetStreamBytes(IFormFile file)
+        private static void AddAttachment(SendGridMessage msg, Uri uri)
         {
-            using (var ms = new MemoryStream())
-            {
-                file.CopyTo(ms);
-                return ms.ToArray();
-            }
+            var response = GetRemoteFile(uri.AbsoluteUri).Result;
+            if (response.IsSuccessStatusCode)
+                msg.AddAttachment(
+                    Path.GetFileName(uri.LocalPath),
+                    Convert.ToBase64String(response.Content.ReadAsByteArrayAsync().Result),
+                    response.Content.Headers.ContentType.MediaType);
         }
 
-        private static void AddAttachment(SendGridMessage msg, IEnumerable<Uri> uris)
+        private static async Task<Response> SendAsync(SendGridMessage msg)
         {
-            foreach(var uri in uris)
-            {
-                var response = GetRemoteFile(uri.AbsoluteUri).Result;
-                if (response.IsSuccessStatusCode)
-                    msg.AddAttachment(
-                        Path.GetFileName(uri.LocalPath),
-                        Convert.ToBase64String(response.Content.ReadAsByteArrayAsync().Result),
-                        response.Content.Headers.ContentType.MediaType);
-            }
-        }
-
-       private static SendGridMessage CreateMessage(
-           EmailAddress from,
-           IEnumerable<EmailAddress> tos,
-           IEnumerable<EmailAddress> ccs,
-           IEnumerable<EmailAddress> bccs,
-           string subject,
-           string text)
-        {
-            var msg = new SendGridMessage();
-            msg.SetFrom(from);
-            msg.AddTos(tos.ToList());
-            foreach (var cc in ccs) msg.AddCc(cc);
-            foreach (var bcc in bccs) msg.AddBcc(bcc);
-            msg.SetSubject(subject);
-            msg.AddContent(MimeType.Text, text);
-            return msg;
-        }
-
-        public static async Task<Response> SendAsync(
-           EmailAddress from, IEnumerable<EmailAddress> tos,
-           IEnumerable<EmailAddress> ccs, IEnumerable<EmailAddress> bccs,
-           string subject, string body,
-           IEnumerable<Uri> attachments)
-        {
-            var msg = CreateMessage(from, tos, ccs, bccs, subject, body);
-            AddAttachment(msg, attachments);
             var client = new SendGridClient(ApiKey);
             return await client.SendEmailAsync(msg);
         }
 
-        public static async Task<Response> SendErrorAsync(
-           EmailAddress from, IEnumerable<EmailAddress> tos,
-           IEnumerable<EmailAddress> ccs, IEnumerable<EmailAddress> bccs,
-           Exception exn)
+        public static async Task<Response> SendAsync(SendGridMessage msg, string subject, string text, Uri attachment)
         {
-            var subject = string.Format("[error] {0}", exn.Message);
-            var msg = CreateMessage(from, tos, ccs, bccs, subject, exn.ToString());
             var client = new SendGridClient(ApiKey);
+            msg.SetSubject(subject);
+            msg.AddContent(MimeType.Text, text);
+            AddAttachment(msg, attachment);
+            return await client.SendEmailAsync(msg);
+        }
+
+        public static async Task<Response> SendAsync(SendGridMessage msg, Exception exn)
+        {
+            var client = new SendGridClient(ApiKey);
+            msg.SetSubject(string.Format("[error] {0}", exn.Message));
+            msg.AddContent(MimeType.Text, exn.ToString());
             return await client.SendEmailAsync(msg);
         }
     }

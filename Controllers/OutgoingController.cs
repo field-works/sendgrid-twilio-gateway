@@ -112,23 +112,45 @@ namespace SendgridTwilioGateway.Controllers
             };
         }
 
+        private static IDictionary<string, string> ParseHeaders(string headers)
+        {
+            return headers.Split("\n")
+                .Select(line => {
+                    var keyValue = line.Split(":");
+                    return new { Key = keyValue[0].Trim(), Value = keyValue[1].Trim() };
+                })
+                .GroupBy(kv => kv.Key)
+                .ToDictionary(g => g.Key, g => string.Join("\n", g.Select(kv => kv.Value)), StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static string GetReplyTo(IDictionary<string, string> headers)
+        {
+            if (headers.ContainsKey("Reply-To"))
+                return headers["Reply-To"];
+            return headers["From"];
+        }
+
         [HttpPost]
         public async void Post()
         {
-            Logger.LogDebug(LoggingEvents.RECEIVE_MAIL, "Headers: {0}", Request.Form["headers"].ToString());
-            var replyAddr = ParseEmailAddresses(Request.Form["from"]);
+            var headers = ParseHeaders(Request.Form["headers"].ToString().Trim());
+            Logger.LogDebug(LoggingEvents.RECEIVE_MAIL, "Headers: {0}", JsonConvert.SerializeObject(headers));
+            var replyAddr = ParseEmailAddresses(GetReplyTo(headers));
+            var msg = SendgridService.CreateMessage(FaxAgentAddr, replyAddr, CcAddr, BccAddr);
+            msg.AddHeader("In-Reply-To", headers["Message-Id"]);
             try
             {
+
                 var options = ToOptions(Request.Form);
                 Logger.LogInformation(LoggingEvents.REQUEST_TO_TWILIO, "Request to Twilio:\n{0}", JsonConvert.SerializeObject(options));
                 var result = await TwilioService.SendAsync(options);
-                Cache.Set(result.Sid, replyAddr);
+                Cache.Set(result.Sid, msg);
                 Logger.LogInformation(LoggingEvents.RESULT_FROM_TWILIO, "Result from Twilio:\n{0}", JsonConvert.SerializeObject(result));
             }
             catch (Exception exn)
             {
                 Logger.LogError(LoggingEvents.OUTGOING_ERROR, exn, "Outgoing Error");
-                var response = await SendgridService.SendErrorAsync(FaxAgentAddr, replyAddr, CcAddr, BccAddr, exn);
+                var response = await SendgridService.SendAsync(msg, exn);
             }
         }
 
@@ -138,14 +160,14 @@ namespace SendgridTwilioGateway.Controllers
         {
             Logger.LogInformation(0, "Fax status:\n{0}", JsonConvert.SerializeObject(Request.Form));
             var blob = Path.GetFileName((new Uri(Request.Form["OriginalMediaUrl"].ToString())).LocalPath);
-            var mediaUrl = new Uri(Request.Form["MediaUrl"].ToString());
+            var sid = Request.Form["FaxSid"].ToString();
+            var msg = Cache.GetOrCreate<SendGridMessage>(sid, _ => SendgridService.CreateMessage(FaxAgentAddr, InboxAddr, CcAddr, BccAddr));
             var subject = string.Format("[{0}] Fax sent to {1}", Request.Form["Status"].ToString(), Request.Form["To"].ToString());
-            var message = Request.Form.Keys
+            var text = Request.Form.Keys
                 .Select(key => string.Format("{0}: {1}", key, Request.Form[key].ToString()))
                 .Aggregate((a, b) => a + "\n" + b) + "\n\n";
-            var sid = Request.Form["FaxSid"].ToString();
-            var replyAddr = Cache.GetOrCreate<IEnumerable<EmailAddress>>(sid, entry => InboxAddr);
-            var response = await SendgridService.SendAsync(FaxAgentAddr, replyAddr, CcAddr, BccAddr, subject, message, new Uri[] { mediaUrl });
+            var mediaUrl = new Uri(Request.Form["MediaUrl"].ToString());
+            var response = await SendgridService.SendAsync(msg, subject, text, mediaUrl);
             await DeleteFile(blob);
         }
     }
