@@ -24,13 +24,11 @@ namespace SendgridTwilioGateway.Services
            SendGridMessage msg,
            EmailAddress from,
            IEnumerable<EmailAddress> tos,
-           IEnumerable<EmailAddress> ccs,
-           IEnumerable<EmailAddress> bccs)
+           IEnumerable<EmailAddress> ccs)
         {
             msg.SetFrom(from);
             msg.AddTos(tos.ToList());
             foreach (var cc in ccs) msg.AddCc(cc);
-            foreach (var bcc in bccs) msg.AddBcc(bcc);
         }
 
         private static async Task<HttpResponseMessage> GetRemoteFile(string uri)
@@ -53,26 +51,23 @@ namespace SendgridTwilioGateway.Services
                     response.Content.Headers.ContentType.MediaType);
         }
 
-        private static async Task<Response> SendAsync(SendGridMessage msg)
+        public static void SetContent(SendGridMessage msg, string subject, string text, Uri attachment)
         {
-            var client = new SendGridClient(ApiKey);
-            return await client.SendEmailAsync(msg);
-        }
-
-        public static async Task<Response> SendAsync(SendGridMessage msg, string subject, string text, Uri attachment)
-        {
-            var client = new SendGridClient(ApiKey);
             msg.SetSubject(subject);
             msg.AddContent(MimeType.Text, text);
-            AddAttachment(msg, attachment);
-            return await client.SendEmailAsync(msg);
+            if (attachment != null)
+                AddAttachment(msg, attachment);
         }
 
-        public static async Task<Response> SendAsync(SendGridMessage msg, Exception exn)
+        public static void SetContent(SendGridMessage msg, Exception exn)
         {
-            var client = new SendGridClient(ApiKey);
             msg.SetSubject(string.Format("[error] {0}", exn.Message));
             msg.AddContent(MimeType.Text, exn.ToString());
+        }
+
+        public static async Task<Response> SendAsync(SendGridMessage msg)
+        {
+            var client = new SendGridClient(ApiKey);
             return await client.SendEmailAsync(msg);
         }
     }
