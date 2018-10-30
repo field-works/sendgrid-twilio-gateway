@@ -21,6 +21,8 @@ namespace SendgridTwilioGateway.Controllers
     [ApiController]
     public class OutgoingController : ControllerBase
     {
+        private const string ContainerSid = "outgoing";
+
         private readonly ILogger Logger;
         private readonly IMemoryCache Cache;
 
@@ -39,10 +41,17 @@ namespace SendgridTwilioGateway.Controllers
 
         private static EmailAddress ParseEmailAddress(string addr)
         {
-            var m = Regex.Match(addr, @"^(.*)<(.+)>");
-            if (m.Success)
-                return new EmailAddress(m.Groups[2].Value, m.Groups[1].Value);
-            return new EmailAddress(addr);
+            try
+            {
+                var m = Regex.Match(addr, @"^(.*)<(.+)>");
+                if (m.Success)
+                    return new EmailAddress(m.Groups[2].Value, m.Groups[1].Value);
+                return new EmailAddress(addr);
+            }
+            catch (Exception exn)
+            {
+                throw new ArgumentException("Bad Email address", exn);
+            }
         }
 
         private static IEnumerable<EmailAddress> ParseEmailAddresses(string addrs)
@@ -54,7 +63,7 @@ namespace SendgridTwilioGateway.Controllers
 
         private static EmailAddress FaxAgentAddr
         {
-            get => ParseEmailAddress(Environment.GetEnvironmentVariable("FAX_AGENT_ADDR") ?? "fax@example.com");
+            get => ParseEmailAddress(Environment.GetEnvironmentVariable("FROM_ADDR") ?? "fax@example.com");
         }
 
         private static IEnumerable<EmailAddress> InboxAddr
@@ -79,48 +88,60 @@ namespace SendgridTwilioGateway.Controllers
 
         private static async Task<string> UploadFile(IFormFile file)
         {
-            var container = await BlobService.OpenContainerAsync();
+            var container = await BlobService.OpenContainerAsync(ContainerSid);
             var blob = Guid.NewGuid().ToString() + "_" + file.FileName;
             return await BlobService.UploadFromStreamAsync(container, file.OpenReadStream(), blob, 0.5);
         }
 
         private static async Task DeleteFile(string blob)
         {
-            var container = await BlobService.OpenContainerAsync();
+            var container = await BlobService.OpenContainerAsync(ContainerSid);
             await BlobService.DeleteBlob(container, blob);
         }
 
         private static CreateFaxOptions ToOptions(IFormCollection form)
         {
-            var m = Regex.Match(string.Join(',', form["to"]), @"^([0-9+]+)@.+");
-            if (!m.Success)
-                throw new Exception("Destination number not found.");
-            var to_number = m.Groups[1].Value;
-
-            var files = form.Files;
-            if (!files.Any())
-                throw new Exception("No Attachment.");
-            if (files.Count() > 1)
-                throw new Exception("Too many Attachments.");
-
-            var uri = new Uri(UploadFile(files.First()).Result);
-
-            return new CreateFaxOptions(to_number, uri)
+            try
             {
-                From = FromNumber,
-                StatusCallback = CallbackUrl
-            };
+                var m = Regex.Match(string.Join(',', form["to"]), @"^([0-9+]+)@.+");
+                if (!m.Success)
+                    throw new Exception("Destination number not found.");
+                var to_number = m.Groups[1].Value;
+
+                var files = form.Files;
+                if (!files.Any())
+                    throw new Exception("No Attachment.");
+                if (files.Count() > 1)
+                    throw new Exception("Too many Attachments.");
+
+                var uri = new Uri(UploadFile(files.First()).Result);
+
+                return new CreateFaxOptions(to_number, uri)
+                {
+                    From = FromNumber,
+                    StatusCallback = CallbackUrl
+                };
+            }
+            catch (Exception exn)
+            {
+                throw new ArgumentException("Bad Email content", exn);
+            }
         }
 
         private static IDictionary<string, string> ParseHeaders(string headers)
         {
-            return headers.Split("\n")
-                .Select(line => {
-                    var keyValue = line.Split(":");
-                    return new { Key = keyValue[0].Trim(), Value = keyValue[1].Trim() };
-                })
-                .GroupBy(kv => kv.Key)
-                .ToDictionary(g => g.Key, g => string.Join("\n", g.Select(kv => kv.Value)), StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                return headers.Split("\n")
+                    .Select(line => line.Split(':'))
+                    .Where(kv => kv.Length == 2)
+                    .GroupBy(kv => kv[0].Trim())
+                    .ToDictionary(g => g.Key, g => string.Join("\n", g.Select(kv => kv[1].Trim())), StringComparer.OrdinalIgnoreCase);
+            }
+            catch (Exception exn)
+            {
+                throw new ArgumentException("Bad Headers", exn);
+            }
         }
 
         private static string GetReplyTo(IDictionary<string, string> headers)
@@ -131,44 +152,64 @@ namespace SendgridTwilioGateway.Controllers
         }
 
         [HttpPost]
-        public async void Post()
+        public async Task<IActionResult> Post()
         {
-            var headers = ParseHeaders(Request.Form["headers"].ToString().Trim());
-            Logger.LogDebug(LoggingEvents.RECEIVE_MAIL, "Headers: {0}", JsonConvert.SerializeObject(headers));
-            var replyAddr = ParseEmailAddresses(GetReplyTo(headers));
-            var msg = SendgridService.CreateMessage(FaxAgentAddr, replyAddr, CcAddr, BccAddr);
-            msg.AddHeader("In-Reply-To", headers["Message-Id"]);
+            Logger.LogInformation(LoggingEvents.REQUEST_TO_SENDFAX, "Request: {0}", JsonConvert.SerializeObject(Request.Form));
+            var msg = new SendGridMessage();
             try
             {
-
+                var headers = ParseHeaders(Request.Form["headers"].ToString());
+                var replyAddr = ParseEmailAddresses(GetReplyTo(headers));
                 var options = ToOptions(Request.Form);
-                Logger.LogInformation(LoggingEvents.REQUEST_TO_TWILIO, "Request to Twilio:\n{0}", JsonConvert.SerializeObject(options));
+                SendgridService.AddAddr(msg, FaxAgentAddr, replyAddr, CcAddr, BccAddr);
+                msg.AddHeader("In-Reply-To", headers["Message-Id"]);
+                Logger.LogDebug(LoggingEvents.REQUEST_TO_TWILIO, "Request to Twilio:\n{0}", JsonConvert.SerializeObject(options));
                 var result = await TwilioService.SendAsync(options);
                 Cache.Set(result.Sid, msg);
-                Logger.LogInformation(LoggingEvents.RESULT_FROM_TWILIO, "Result from Twilio:\n{0}", JsonConvert.SerializeObject(result));
+                Logger.LogDebug(LoggingEvents.RESULT_FROM_TWILIO, "Result from Twilio:\n{0}", JsonConvert.SerializeObject(result));
+                return Ok();
+            }
+            catch (ArgumentException exn)
+            {
+                Logger.LogError(LoggingEvents.ERROR_ON_SENDFAX, exn, "Bad Request");
+                return BadRequest();
             }
             catch (Exception exn)
             {
-                Logger.LogError(LoggingEvents.OUTGOING_ERROR, exn, "Outgoing Error");
+                Logger.LogError(LoggingEvents.ERROR_ON_TWILIO, exn, "FAX Sending Error");
+                Logger.LogDebug(LoggingEvents.REQUEST_TO_SENDGRID, "Message:\n{0}", JsonConvert.SerializeObject(msg));
                 var response = await SendgridService.SendAsync(msg, exn);
+                Logger.LogDebug(LoggingEvents.RESULT_FROM_SENDGRID, "Response:\n{0}", JsonConvert.SerializeObject(response));
+                return StatusCode(500);
             }
         }
 
         [HttpPost]
-        [Route("callback")]
-        public async void Callback()
+        [Route("finished")]
+        public async Task<IActionResult> Finished()
         {
-            Logger.LogInformation(0, "Fax status:\n{0}", JsonConvert.SerializeObject(Request.Form));
-            var blob = Path.GetFileName((new Uri(Request.Form["OriginalMediaUrl"].ToString())).LocalPath);
-            var sid = Request.Form["FaxSid"].ToString();
-            var msg = Cache.GetOrCreate<SendGridMessage>(sid, _ => SendgridService.CreateMessage(FaxAgentAddr, InboxAddr, CcAddr, BccAddr));
-            var subject = string.Format("[{0}] Fax sent to {1}", Request.Form["Status"].ToString(), Request.Form["To"].ToString());
-            var text = Request.Form.Keys
-                .Select(key => string.Format("{0}: {1}", key, Request.Form[key].ToString()))
-                .Aggregate((a, b) => a + "\n" + b) + "\n\n";
-            var mediaUrl = new Uri(Request.Form["MediaUrl"].ToString());
-            var response = await SendgridService.SendAsync(msg, subject, text, mediaUrl);
-            await DeleteFile(blob);
+            Logger.LogInformation(LoggingEvents.SENDFAX_FINISHED, "Request: {0}", JsonConvert.SerializeObject(Request.Form));
+            try
+            {
+                var blob = Path.GetFileName((new Uri(Request.Form["OriginalMediaUrl"].ToString())).LocalPath);
+                var sid = Request.Form["FaxSid"].ToString();
+                var msg = Cache.GetOrCreate<SendGridMessage>(sid, _ => new SendGridMessage());
+                var subject = string.Format("[{0}] Fax sent to {1}", Request.Form["Status"].ToString(), Request.Form["To"].ToString());
+                var text = Request.Form.Keys
+                    .Select(key => string.Format("{0}: {1}", key, Request.Form[key].ToString()))
+                    .Aggregate((a, b) => a + "\n" + b) + "\n\n";
+                var mediaUrl = new Uri(Request.Form["MediaUrl"].ToString());
+                Logger.LogDebug(LoggingEvents.REQUEST_TO_SENDGRID, "Message:\n{0}", JsonConvert.SerializeObject(msg));
+                var response = await SendgridService.SendAsync(msg, subject, text, mediaUrl);
+                Logger.LogDebug(LoggingEvents.RESULT_FROM_SENDGRID, "Response:\n{0}", JsonConvert.SerializeObject(response));
+                await DeleteFile(blob);
+                return Ok();
+            }
+            catch (Exception exn)
+            {
+                Logger.LogError(LoggingEvents.ERROR_ON_SENDGRID, exn, "Mail Sending Error");
+                return StatusCode(500);
+            }
         }
     }
 }

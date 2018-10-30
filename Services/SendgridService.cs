@@ -20,18 +20,17 @@ namespace SendgridTwilioGateway.Services
             get => Environment.GetEnvironmentVariable("SENDGRID_APIKEY") ?? "";
         }
 
-       public static SendGridMessage CreateMessage(
+       public static void AddAddr(
+           SendGridMessage msg,
            EmailAddress from,
            IEnumerable<EmailAddress> tos,
            IEnumerable<EmailAddress> ccs,
            IEnumerable<EmailAddress> bccs)
         {
-            var msg = new SendGridMessage();
             msg.SetFrom(from);
             msg.AddTos(tos.ToList());
             foreach (var cc in ccs) msg.AddCc(cc);
             foreach (var bcc in bccs) msg.AddBcc(bcc);
-            return msg;
         }
 
         private static async Task<HttpResponseMessage> GetRemoteFile(string uri)

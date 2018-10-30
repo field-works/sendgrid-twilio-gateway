@@ -19,16 +19,11 @@ namespace SendgridTwilioGateway.Services
             get => Environment.GetEnvironmentVariable("STORAGE_CONNECTION_STRING") ?? "";
         }
 
-        private static string ContainerSid
-        {
-            get => Environment.GetEnvironmentVariable("CONTAINER_SID") ?? "";
-        }
-
-        public static async Task<CloudBlobContainer> OpenContainerAsync()
+        public static async Task<CloudBlobContainer> OpenContainerAsync(string containerSid)
         {
             var storageAccount = CloudStorageAccount.Parse(ConnectionString);
             var blobClient = storageAccount.CreateCloudBlobClient();
-            var container = blobClient.GetContainerReference(ContainerSid);
+            var container = blobClient.GetContainerReference(containerSid);
             await container.CreateIfNotExistsAsync();
             return container;
         }
