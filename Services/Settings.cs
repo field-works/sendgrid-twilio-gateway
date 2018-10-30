@@ -45,11 +45,6 @@ namespace SendgridTwilioGateway.Services
             get => Environment.GetEnvironmentVariable("TO_PREFIX") ?? "";
         }
 
-        public static Uri CallbackUrl
-        {
-            get => new Uri(Environment.GetEnvironmentVariable("OUTGOING_CALLBACK") ?? "");
-        }
-
         public static string FromNumber
         {
             get => Environment.GetEnvironmentVariable("FROM_NUMBER") ?? "";

@@ -26,6 +26,13 @@ namespace SendgridTwilioGateway.Services
             foreach (var cc in ccs) msg.AddCc(cc);
         }
 
+        public static SendGridMessage CreateMessage()
+        {
+            var msg = new SendGridMessage() { From = Settings.FaxAgentAddr };
+            msg.AddTos(Settings.InboxAddr.ToList());
+            return msg;
+        }
+
         private static async Task<HttpResponseMessage> GetRemoteFile(string uri)
         {
             var client = new HttpClient();
@@ -64,6 +71,12 @@ namespace SendgridTwilioGateway.Services
         {
             var client = new SendGridClient(Settings.ApiKey);
             return await client.SendEmailAsync(msg);
+        }
+
+        public static async Task<Response> ReplyError(SendGridMessage msg, Exception exn)
+        {
+            SendgridService.SetContent(msg, exn);
+            return await SendgridService.SendAsync(msg);
         }
     }
 }

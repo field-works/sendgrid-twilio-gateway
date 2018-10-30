@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using Microsoft.AspNetCore.Http;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Auth;
 using Microsoft.WindowsAzure.Storage.Blob;
@@ -44,10 +45,25 @@ namespace SendgridTwilioGateway.Services
             await blob.DeleteAsync();
         }
 
+        private const string ContainerSid = "outgoing";
+
         public static async Task DeleteContainer(CloudBlobContainer container)
         {
             await container.FetchAttributesAsync();
             await container.DeleteAsync();
+        }
+
+        public static async Task<string> UploadFile(IFormFile file)
+        {
+            var container = await BlobService.OpenContainerAsync(ContainerSid);
+            var blob = Guid.NewGuid().ToString() + "_" + file.FileName;
+            return await BlobService.UploadFromStreamAsync(container, file.OpenReadStream(), blob, 0.5);
+        }
+
+        public static async Task DeleteFile(string blob)
+        {
+            var container = await BlobService.OpenContainerAsync(ContainerSid);
+            await BlobService.DeleteBlob(container, blob);
         }
     }
 }

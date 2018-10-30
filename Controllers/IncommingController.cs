@@ -39,40 +39,25 @@ namespace SendgridTwilioGateway.Controllers
         }
 
         [HttpPost]
-        [Route("sent")]
         [Produces("application/xml")]
-        public IActionResult Sent()
+        public IActionResult Post()
         {
+            Logger.LogInformation(LoggingEvents.INCOMMING, "Request: {0}", JsonConvert.SerializeObject(Request.Form));
             return Ok(new Response
             {
                 Receive = new Receive
                 {
-                    Action = "/api/incomming/received"
+                    Action = Request.Host + "/api/incomming/received"
                 }
             });
         }
 
-        private SendGridMessage CreateMessage()
-        {
-            var msg = new SendGridMessage() { From = Settings.FaxAgentAddr };
-            msg.AddTos(Settings.InboxAddr.ToList());
-            return msg;
-
-        }
-
-        private async Task ReplyError(SendGridMessage msg, Exception exn)
-        {
-            SendgridService.SetContent(msg, exn);
-            Logger.LogDebug(0, "Message:\n{0}", JsonConvert.SerializeObject(msg));
-            var response = await SendgridService.SendAsync(msg);
-            Logger.LogDebug(0, "Response:\n{0}", JsonConvert.SerializeObject(response));
-        }
-
         [HttpPost]
+        [Route("received")]
         public async Task<IActionResult> Received()
         {
-            Logger.LogInformation(0, "Request: {0}", JsonConvert.SerializeObject(Request.Form));
-            var msg = CreateMessage();
+            Logger.LogInformation(LoggingEvents.FAX_RECIEVED, "Request: {0}", JsonConvert.SerializeObject(Request.Form));
+            var msg = SendgridService.CreateMessage();
             try
             {
                 var status = Request.Form["Status"].ToString();
@@ -80,17 +65,17 @@ namespace SendgridTwilioGateway.Controllers
                 var text = Request.Form.Keys
                     .Select(key => string.Format("{0}: {1}", key, Request.Form[key].ToString()))
                     .Aggregate((a, b) => a + "\n" + b) + "\n\n";
-                var mediaUrl = (status == "delvered") ? new Uri(Request.Form["MediaUrl"].ToString()) : null;
+                var mediaUrl = (status == "received") ? new Uri(Request.Form["MediaUrl"].ToString()) : null;
                 SendgridService.SetContent(msg, subject, text, mediaUrl);
-                Logger.LogDebug(0, "Message:\n{0}", JsonConvert.SerializeObject(msg));
+                Logger.LogDebug(LoggingEvents.REQUEST_TO_TWILIO, "Message:\n{0}", JsonConvert.SerializeObject(msg));
                 var response = await SendgridService.SendAsync(msg);
-                Logger.LogDebug(0, "Response:\n{0}", JsonConvert.SerializeObject(response));
+                Logger.LogDebug(LoggingEvents.RESULT_FROM_TWILIO, "Response:\n{0}", JsonConvert.SerializeObject(response));
                 return Ok();
             }
             catch (Exception exn)
             {
-                Logger.LogError(LoggingEvents.ERROR_ON_SENDGRID, exn, "FAX received Error");
-                await ReplyError(msg, exn);
+                Logger.LogError(LoggingEvents.ERROR_ON_INCOMMING, exn, "FAX received Error");
+                var response = await SendgridService.ReplyError(msg, exn);
                 return StatusCode(500);
             }
         }
