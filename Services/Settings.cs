@@ -25,7 +25,12 @@ namespace SendgridTwilioGateway.Services
             get => Environment.GetEnvironmentVariable("TWILIO_PASSWORD") ?? "";
         }
 
-        public static string ConnectionString
+        public static string TwilioNumber
+        {
+            get => Environment.GetEnvironmentVariable("TWILIO_NUMBER") ?? "";
+        }
+
+        public static string StorageConnectionString
         {
             get => Environment.GetEnvironmentVariable("STORAGE_CONNECTION_STRING") ?? "";
         }
@@ -43,11 +48,6 @@ namespace SendgridTwilioGateway.Services
         public static string ToPrefix
         {
             get => Environment.GetEnvironmentVariable("TO_PREFIX") ?? "";
-        }
-
-        public static string FromNumber
-        {
-            get => Environment.GetEnvironmentVariable("FROM_NUMBER") ?? "";
         }
 
         public static EmailAddress ParseEmailAddress(string addr)

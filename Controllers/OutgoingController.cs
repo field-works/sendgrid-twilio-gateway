@@ -45,15 +45,15 @@ namespace SendgridTwilioGateway.Controllers
                 var files = request.Form.Files
                     .Where(file => file.ContentType == "application/pdf");
                 if (!files.Any())
-                    throw new Exception("No Attachment.");
+                    throw new Exception("No PDF Attachment.");
                 if (files.Count() > 1)
-                    throw new Exception("Too many Attachments.");
+                    throw new Exception("Too many PDF Attachments.");
 
                 var mediaUrl = new Uri(BlobService.UploadFile(files.First()).Result);
                 var originalUrl = new Uri(request.GetEncodedUrl());
                 return new CreateFaxOptions(to_number, mediaUrl)
                 {
-                    From = Settings.FromNumber,
+                    From = Settings.TwilioNumber,
                     StatusCallback = new Uri(originalUrl.GetLeftPart(UriPartial.Authority) + "/api/outgoing/sent")
                 };
             }
