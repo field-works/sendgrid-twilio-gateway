@@ -15,11 +15,6 @@ namespace SendgridTwilioGateway.Services
 {
     public static class SendgridService
     {
-        private static string ApiKey
-        {
-            get => Environment.GetEnvironmentVariable("SENDGRID_APIKEY") ?? "";
-        }
-
        public static void AddAddr(
            SendGridMessage msg,
            EmailAddress from,
@@ -67,7 +62,7 @@ namespace SendgridTwilioGateway.Services
 
         public static async Task<Response> SendAsync(SendGridMessage msg)
         {
-            var client = new SendGridClient(ApiKey);
+            var client = new SendGridClient(Settings.ApiKey);
             return await client.SendEmailAsync(msg);
         }
     }

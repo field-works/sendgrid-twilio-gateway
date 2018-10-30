@@ -11,19 +11,9 @@ namespace SendgridTwilioGateway.Services
 {
     public static class TwilioService
     {
-        private static string TwilioUsername
-        {
-            get => Environment.GetEnvironmentVariable("TWILIO_USERNAME") ?? "";
-        }
-
-        private static string TwilioPassword
-        {
-            get => Environment.GetEnvironmentVariable("TWILIO_PASSWORD") ?? "";
-        }
-
         static TwilioService()
         {
-            TwilioClient.Init(TwilioUsername, TwilioPassword);
+            TwilioClient.Init(Settings.TwilioUsername, Settings.TwilioPassword);
         }
 
         public static Task<FaxResource> SendAsync(CreateFaxOptions options)

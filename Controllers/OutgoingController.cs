@@ -34,53 +34,6 @@ namespace SendgridTwilioGateway.Controllers
             this.Cache = cache;
         }
 
-        private static string FromNumber
-        {
-            get => Environment.GetEnvironmentVariable("FROM_NUMBER") ?? "";
-        }
-
-        private static EmailAddress ParseEmailAddress(string addr)
-        {
-            try
-            {
-                var m = Regex.Match(addr, @"^(.*)<(.+)>");
-                if (m.Success)
-                    return new EmailAddress(m.Groups[2].Value, m.Groups[1].Value);
-                return new EmailAddress(addr);
-            }
-            catch (Exception exn)
-            {
-                throw new ArgumentException("Bad Email address", exn);
-            }
-        }
-
-        private static IEnumerable<EmailAddress> ParseEmailAddresses(string addrs)
-        {
-            if (string.IsNullOrEmpty(addrs))
-                return Enumerable.Empty<EmailAddress>();
-            return addrs.Split(',').Select(addr => ParseEmailAddress(addr));
-        }
-
-        private static EmailAddress FaxAgentAddr
-        {
-            get => ParseEmailAddress(Environment.GetEnvironmentVariable("FROM_ADDR") ?? "fax@example.com");
-        }
-
-        private static IEnumerable<EmailAddress> InboxAddr
-        {
-            get => ParseEmailAddresses(Environment.GetEnvironmentVariable("INBOX_ADDR") ?? "");
-        }
-
-        private static string ToPrefix
-        {
-            get => Environment.GetEnvironmentVariable("TO_PREFIX") ?? "";
-        }
-
-        private static Uri CallbackUrl
-        {
-            get => new Uri(Environment.GetEnvironmentVariable("OUTGOING_CALLBACK") ?? "");
-        }
-
         private static async Task<string> UploadFile(IFormFile file)
         {
             var container = await BlobService.OpenContainerAsync(ContainerSid);
@@ -98,7 +51,7 @@ namespace SendgridTwilioGateway.Controllers
         {
             try
             {
-                var m = Regex.Match(string.Join(',', form["to"]), string.Format(@"^{0}([0-9+]+)@.+", ToPrefix));
+                var m = Regex.Match(string.Join(',', form["to"]), string.Format(@"^{0}([0-9+]+)@.+", Settings.ToPrefix));
                 if (!m.Success)
                     throw new Exception("Destination number not found.");
                 var to_number = m.Groups[1].Value;
@@ -113,8 +66,8 @@ namespace SendgridTwilioGateway.Controllers
 
                 return new CreateFaxOptions(to_number, uri)
                 {
-                    From = FromNumber,
-                    StatusCallback = CallbackUrl
+                    From = Settings.FromNumber,
+                    StatusCallback = Settings.CallbackUrl
                 };
             }
             catch (Exception exn)
@@ -156,8 +109,8 @@ namespace SendgridTwilioGateway.Controllers
 
         private SendGridMessage CreateMessage()
         {
-            var msg = new SendGridMessage() { From = FaxAgentAddr };
-            msg.AddTos(InboxAddr.ToList());
+            var msg = new SendGridMessage() { From = Settings.FaxAgentAddr };
+            msg.AddTos(Settings.InboxAddr.ToList());
             return msg;
         }
 
@@ -170,7 +123,7 @@ namespace SendgridTwilioGateway.Controllers
             {
                 // Set reply information.
                 var headers = ParseHeaders(Request.Form["headers"].ToString());
-                msg.AddCcs(ParseEmailAddresses(GetReplyTo(headers)).ToList());
+                msg.AddCcs(Settings.ParseEmailAddresses(GetReplyTo(headers)).ToList());
                 msg.AddHeader("In-Reply-To", headers["Message-Id"]);
                 // Send FAX
                 var options = ToOptions(Request.Form);
