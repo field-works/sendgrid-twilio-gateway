@@ -42,7 +42,7 @@ namespace SendgridTwilioGateway.Controllers
             {
                 Receive = new Receive
                 {
-                    Action = Request.Host + "/api/incomming/received"
+                    Action = "/api/incomming/received"
                 }
             });
         }

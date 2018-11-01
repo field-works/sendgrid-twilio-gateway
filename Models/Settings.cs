@@ -35,6 +35,7 @@ namespace SendgridTwilioGateway.Models
 
     public class FaxStation
     {
+        public string CountryCode { get; set; }
         public string FromNumber { get; set; }
         public string ToPattern { get; set; }
         public string FromAddr { get; set; }

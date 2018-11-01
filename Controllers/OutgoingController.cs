@@ -41,6 +41,13 @@ namespace SendgridTwilioGateway.Controllers
             this.Cache = cache;
         }
 
+        private string ToE164(string number)
+        {
+            if (number.StartsWith('0'))
+                return string.Format("+{0}{1}", Settings.FaxStation.CountryCode, number.Substring(1));
+            return number;
+        }
+
         private async Task<CreateFaxOptions> ParseRequest(HttpRequest request)
         {
             try
@@ -48,7 +55,7 @@ namespace SendgridTwilioGateway.Controllers
                 var m = Regex.Match(Request.Form["to"], Settings.FaxStation.ToPattern);
                 if (!m.Success)
                     throw new Exception("Bad request");
-                var to_number = m.Groups[1].Value;
+                var to_number = ToE164(m.Groups[1].Value);
 
                 var files = request.Form.Files
                     .Where(file => file.ContentType == "application/pdf");
