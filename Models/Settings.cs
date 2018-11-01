@@ -32,5 +32,7 @@ namespace SendgridTwilioGateway.Models
         public string ToPattern { get; set; }
         public string FromAddr { get; set; }
         public string InboxAddr { get; set; }
+
+        public string Quality { get; set; }
     }
 }

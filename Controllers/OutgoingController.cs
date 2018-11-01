@@ -50,10 +50,10 @@ namespace SendgridTwilioGateway.Controllers
         {
             try
             {
-                var m = Regex.Match(Request.Form["to"], Settings.FaxStation.ToPattern);
-                if (!m.Success)
+                var matchTo = Regex.Match(Request.Form["to"], Settings.FaxStation.ToPattern);
+                if (!matchTo.Success)
                     throw new Exception("Bad request");
-                var to_number = ToE164(m.Groups[1].Value);
+                var to_number = ToE164(matchTo.Groups[1].Value);
 
                 var files = request.Form.Files
                     .Where(file => file.ContentType == "application/pdf");
@@ -62,12 +62,16 @@ namespace SendgridTwilioGateway.Controllers
                 if (files.Count() > 1)
                     throw new Exception("Too many PDF attachments.");
 
+                var matchSubject = Regex.Match(Request.Form["subject"], @"{\s*(\S+)\s*}$");
+                var quality = matchSubject.Success ? matchSubject.Groups[1].Value : Settings.FaxStation.Quality;
+
                 var container = await BlobService.OpenContainerAsync(Settings.Azure);
                 var mediaUrl = new Uri(await container.UploadFile(files.First()));
                 var originalUrl = new Uri(request.GetEncodedUrl());
                 return new CreateFaxOptions(to_number, mediaUrl)
                 {
                     From = Settings.FaxStation.FromNumber,
+                    Quality = quality.ToLower(),
                     StatusCallback = new Uri(originalUrl.GetLeftPart(UriPartial.Authority) + "/api/outgoing/sent")
                 };
             }
