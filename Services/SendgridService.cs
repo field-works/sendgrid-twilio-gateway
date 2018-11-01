@@ -1,16 +1,13 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.IO;
-using System.Threading.Tasks;
+using System.Linq;
 using System.Net.Http;
-using Newtonsoft.Json;
-using Microsoft.Extensions.Logging;
-using Microsoft.AspNetCore.Http;
+using System.Threading.Tasks;
 using SendGrid;
 using SendGrid.Helpers.Mail;
-using SendgridTwilioGateway.Models;
 using SendgridTwilioGateway.Extensions;
+using SendgridTwilioGateway.Models;
 
 namespace SendgridTwilioGateway.Services
 {

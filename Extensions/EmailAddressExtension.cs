@@ -1,9 +1,7 @@
 using System;
-using System.IO;
-using System.Threading.Tasks;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using System.Linq;
+using System.Text.RegularExpressions;
 using SendGrid.Helpers.Mail;
 
 namespace SendgridTwilioGateway.Extensions

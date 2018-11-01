@@ -1,11 +1,3 @@
-using System;
-using System.IO;
-using System.Threading.Tasks;
-using System.Collections.Generic;
-using System.Text.RegularExpressions;
-using System.Linq;
-using SendGrid.Helpers.Mail;
-
 namespace SendgridTwilioGateway.Models
 {
     public class Settings

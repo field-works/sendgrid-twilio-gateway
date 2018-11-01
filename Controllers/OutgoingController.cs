@@ -1,25 +1,23 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.IO;
-using System.Threading.Tasks;
+using System.Linq;
 using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.Mvc;
-using Newtonsoft.Json;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Http.Extensions;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.AspNetCore.Http.Extensions; 
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Newtonsoft.Json;
 using SendGrid;
 using SendGrid.Helpers.Mail;
-using Twilio;
-using Twilio.Exceptions;
-using Twilio.Rest.Fax.V1;
-using Twilio.Rest.Fax.V1.Fax;
+using SendgridTwilioGateway.Extensions;
 using SendgridTwilioGateway.Models;
 using SendgridTwilioGateway.Services;
-using SendgridTwilioGateway.Extensions;
+using Twilio;
+using Twilio.Rest.Fax.V1;
 
 namespace SendgridTwilioGateway.Controllers
 {

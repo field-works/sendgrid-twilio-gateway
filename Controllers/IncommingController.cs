@@ -1,18 +1,11 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.IO;
 using System.Threading.Tasks;
-using System.Text.RegularExpressions;
-using System.Xml;
 using Microsoft.AspNetCore.Mvc;
-using Newtonsoft.Json;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Newtonsoft.Json;
 using SendGrid;
-using SendGrid.Helpers.Mail;
-using Twilio.Rest.Fax.V1;
 using SendgridTwilioGateway.Models;
 using SendgridTwilioGateway.Services;
 
