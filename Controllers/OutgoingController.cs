@@ -108,12 +108,13 @@ namespace SendgridTwilioGateway.Controllers
         public async Task<IActionResult> Post()
         {
             Logger.LogInformation(LoggingEvents.INCOMMING, "Request: {0}", JsonConvert.SerializeObject(Request.Form));
+            var rawHeaders = Request.Form["headers"].ToString();
             var msg = SendgridService.CreateMessage(Settings.FaxStation);
             try
             {
                 // Set reply information.
                 msg.SetSubject(Request.Form["subject"]);
-                var headers = ParseHeaders(Request.Form["headers"]);
+                var headers = ParseHeaders(rawHeaders);
                 msg.AddCcs(GetReplyTo(headers).AsEmailAddresses());
                 msg.AddHeader("In-Reply-To", headers["Message-Id"]);
                 // Send FAX
@@ -128,7 +129,8 @@ namespace SendgridTwilioGateway.Controllers
             catch (ArgumentException exn)
             {
                 Logger.LogError(LoggingEvents.ERROR_ON_OUTGOING, exn, "Bad Request");
-                msg.SetContent(exn);
+                msg.SetSubject(string.Format("[error] {0}", exn.Message));
+                msg.AddContent(MimeType.Text, rawHeaders);
                 await msg.SendAsync(Settings.SendGrid);
             }
             catch (Exception exn)
