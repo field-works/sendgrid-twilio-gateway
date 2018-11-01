@@ -10,21 +10,22 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
 using Newtonsoft.Json.Linq;
+using SendgridTwilioGateway.Models;
 
 namespace SendgridTwilioGateway.Services
 {
     public static class BlobService
     {
-        public static async Task<CloudBlobContainer> OpenContainerAsync(string containerSid)
+        public static async Task<CloudBlobContainer> OpenContainerAsync(Azure settings)
         {
-            var storageAccount = CloudStorageAccount.Parse(Settings.StorageConnectionString);
+            var storageAccount = CloudStorageAccount.Parse(settings.StorageConnectionString);
             var blobClient = storageAccount.CreateCloudBlobClient();
-            var container = blobClient.GetContainerReference(containerSid);
+            var container = blobClient.GetContainerReference(settings.ContainerSid);
             await container.CreateIfNotExistsAsync();
             return container;
         }
 
-        public static async Task<string> UploadFromStreamAsync(CloudBlobContainer container, Stream stream, string fileName, double sharedAccessExpiryHours)
+        private static async Task<string> UploadFromStreamAsync(this CloudBlobContainer container, Stream stream, string fileName, double sharedAccessExpiryHours)
         {
             var blob = container.GetBlockBlobReference(fileName);
             var now = DateTime.Now;
@@ -39,31 +40,16 @@ namespace SendgridTwilioGateway.Services
             return blob.Uri.AbsoluteUri + sas;
         }
 
-        public static async Task DeleteBlob(CloudBlobContainer container, string fileName)
+        public static async Task<string> UploadFile(this CloudBlobContainer container, IFormFile file)
+        {
+            var fileName = Guid.NewGuid().ToString() + "_" + file.FileName;
+            return await container.UploadFromStreamAsync(file.OpenReadStream(), fileName, 0.5);
+        }
+
+        public static async Task DeleteFile(this CloudBlobContainer container, string fileName)
         {
             var blob = container.GetBlockBlobReference(fileName);
             await blob.DeleteAsync();
-        }
-
-        private const string ContainerSid = "outgoing";
-
-        public static async Task DeleteContainer(CloudBlobContainer container)
-        {
-            await container.FetchAttributesAsync();
-            await container.DeleteAsync();
-        }
-
-        public static async Task<string> UploadFile(IFormFile file)
-        {
-            var container = await BlobService.OpenContainerAsync(ContainerSid);
-            var blob = Guid.NewGuid().ToString() + "_" + file.FileName;
-            return await BlobService.UploadFromStreamAsync(container, file.OpenReadStream(), blob, 0.5);
-        }
-
-        public static async Task DeleteFile(string blob)
-        {
-            var container = await BlobService.OpenContainerAsync(ContainerSid);
-            await BlobService.DeleteBlob(container, blob);
         }
     }
 }

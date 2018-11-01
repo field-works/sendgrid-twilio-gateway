@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Http;
 using SendGrid;
 using SendGrid.Helpers.Mail;
 using SendgridTwilioGateway.Models;
+using SendgridTwilioGateway.Extensions;
 
 namespace SendgridTwilioGateway.Services
 {
@@ -26,10 +27,10 @@ namespace SendgridTwilioGateway.Services
             foreach (var cc in ccs) msg.AddCc(cc);
         }
 
-        public static SendGridMessage CreateMessage()
+        public static SendGridMessage CreateMessage(FaxStation fax)
         {
-            var msg = new SendGridMessage() { From = Settings.FaxAgentAddr };
-            msg.AddTos(Settings.InboxAddr.ToList());
+            var msg = new SendGridMessage() { From = fax.FromAddr.AsEmailAddress() };
+            msg.AddTos(fax.InboxAddr.AsEmailAddresses());
             return msg;
         }
 
@@ -43,7 +44,7 @@ namespace SendgridTwilioGateway.Services
             });
         }
 
-        private static void AddAttachment(SendGridMessage msg, Uri uri)
+        public static void AddAttachment(this SendGridMessage msg, Uri uri)
         {
             var response = GetRemoteFile(uri.AbsoluteUri).Result;
             if (response.IsSuccessStatusCode)
@@ -53,30 +54,16 @@ namespace SendgridTwilioGateway.Services
                     response.Content.Headers.ContentType.MediaType);
         }
 
-        public static void SetContent(SendGridMessage msg, string subject, string text, Uri attachment)
-        {
-            msg.SetSubject(subject);
-            msg.AddContent(MimeType.Text, text);
-            if (attachment != null)
-                AddAttachment(msg, attachment);
-        }
-
-        public static void SetContent(SendGridMessage msg, Exception exn)
+        public static void SetContent(this SendGridMessage msg, Exception exn)
         {
             msg.SetSubject(string.Format("[error] {0}", exn.Message));
             msg.AddContent(MimeType.Text, exn.ToString());
         }
 
-        public static async Task<Response> SendAsync(SendGridMessage msg)
+        public static async Task<Response> SendAsync(this SendGridMessage msg, Models.SendGrid settings)
         {
-            var client = new SendGridClient(Settings.ApiKey);
+            var client = new SendGridClient(settings.ApiKey);
             return await client.SendEmailAsync(msg);
-        }
-
-        public static async Task<Response> ReplyError(SendGridMessage msg, Exception exn)
-        {
-            SendgridService.SetContent(msg, exn);
-            return await SendgridService.SendAsync(msg);
         }
     }
 }

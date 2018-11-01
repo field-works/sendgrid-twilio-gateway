@@ -10,6 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SendgridTwilioGateway.Models;
 
 namespace azure
 {
@@ -28,6 +29,8 @@ namespace azure
             services.AddMvc()
                 .AddXmlSerializerFormatters()
                 .SetCompatibilityVersion(CompatibilityVersion.Version_2_1);
+
+            services.Configure<Settings>(this.Configuration.GetSection("Settings"));    
 
             services.AddMemoryCache();
         }

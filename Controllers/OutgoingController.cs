@@ -10,11 +10,16 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.AspNetCore.Http.Extensions; 
+using Microsoft.Extensions.Options;
 using SendGrid;
 using SendGrid.Helpers.Mail;
+using Twilio;
+using Twilio.Exceptions;
 using Twilio.Rest.Fax.V1;
+using Twilio.Rest.Fax.V1.Fax;
 using SendgridTwilioGateway.Models;
 using SendgridTwilioGateway.Services;
+using SendgridTwilioGateway.Extensions;
 
 namespace SendgridTwilioGateway.Controllers
 {
@@ -22,38 +27,42 @@ namespace SendgridTwilioGateway.Controllers
     [ApiController]
     public class OutgoingController : ControllerBase
     {
+        private readonly Settings Settings;
         private readonly ILogger Logger;
         private readonly IMemoryCache Cache;
 
         public OutgoingController(
+            IOptions<Settings> settings,
             ILogger<OutgoingController> logger,
             IMemoryCache cache)
         {
+            this.Settings = settings.Value;
             this.Logger = logger;
             this.Cache = cache;
         }
 
-        private static CreateFaxOptions ToOptions(HttpRequest request)
+        private async Task<CreateFaxOptions> ParseRequest(HttpRequest request)
         {
             try
             {
-                var m = Regex.Match(string.Join(',', request.Form["to"]), string.Format(@"^{0}([0-9+]+)@.+", Settings.ToPrefix));
+                var m = Regex.Match(Request.Form["to"], Settings.FaxStation.ToPattern);
                 if (!m.Success)
-                    throw new Exception("Destination number not found.");
+                    throw new Exception("Bad request");
                 var to_number = m.Groups[1].Value;
 
                 var files = request.Form.Files
                     .Where(file => file.ContentType == "application/pdf");
                 if (!files.Any())
-                    throw new Exception("No PDF Attachment.");
+                    throw new Exception("No PDF attachment.");
                 if (files.Count() > 1)
-                    throw new Exception("Too many PDF Attachments.");
+                    throw new Exception("Too many PDF attachments.");
 
-                var mediaUrl = new Uri(BlobService.UploadFile(files.First()).Result);
+                var container = await BlobService.OpenContainerAsync(Settings.Azure);
+                var mediaUrl = new Uri(await container.UploadFile(files.First()));
                 var originalUrl = new Uri(request.GetEncodedUrl());
                 return new CreateFaxOptions(to_number, mediaUrl)
                 {
-                    From = Settings.TwilioNumber,
+                    From = Settings.FaxStation.FromNumber,
                     StatusCallback = new Uri(originalUrl.GetLeftPart(UriPartial.Authority) + "/api/outgoing/sent")
                 };
             }
@@ -90,30 +99,34 @@ namespace SendgridTwilioGateway.Controllers
         public async Task<IActionResult> Post()
         {
             Logger.LogInformation(LoggingEvents.INCOMMING, "Request: {0}", JsonConvert.SerializeObject(Request.Form));
-            var msg = SendgridService.CreateMessage();
+            var msg = SendgridService.CreateMessage(Settings.FaxStation);
             try
             {
                 // Set reply information.
-                var headers = ParseHeaders(Request.Form["headers"].ToString());
-                msg.AddCcs(Settings.ParseEmailAddresses(GetReplyTo(headers)).ToList());
+                msg.SetSubject(Request.Form["subject"]);
+                var headers = ParseHeaders(Request.Form["headers"]);
+                msg.AddCcs(GetReplyTo(headers).AsEmailAddresses());
                 msg.AddHeader("In-Reply-To", headers["Message-Id"]);
                 // Send FAX
-                var options = ToOptions(Request);
+                TwilioClient.Init(Settings.Twilio.UserName, Settings.Twilio.Password);
+                var options = await ParseRequest(Request);
                 Logger.LogDebug(LoggingEvents.REQUEST_TO_TWILIO, "Request to Twilio:\n{0}", JsonConvert.SerializeObject(options));
-                var result = await TwilioService.SendAsync(options);
+                var result = await FaxResource.CreateAsync(options, TwilioClient.GetRestClient());
                 Logger.LogDebug(LoggingEvents.RESULT_FROM_TWILIO, "Result from Twilio:\n{0}", JsonConvert.SerializeObject(result));
-                // Store Email address.
+                // Store reply address.
                 Cache.Set(result.Sid, msg);
             }
             catch (ArgumentException exn)
             {
                 Logger.LogError(LoggingEvents.ERROR_ON_OUTGOING, exn, "Bad Request");
-                await SendgridService.ReplyError(msg, exn);
+                msg.SetContent(exn);
+                await msg.SendAsync(Settings.SendGrid);
             }
             catch (Exception exn)
             {
                 Logger.LogError(LoggingEvents.ERROR_ON_TWILIO, exn, "FAX Sending Error");
-                await SendgridService.ReplyError(msg, exn);
+                msg.SetContent(exn);
+                await msg.SendAsync(Settings.SendGrid);
             }
             return Ok();
         }
@@ -123,30 +136,32 @@ namespace SendgridTwilioGateway.Controllers
         public async Task<IActionResult> Sent()
         {
             Logger.LogInformation(LoggingEvents.FAX_SENT, "Request: {0}", JsonConvert.SerializeObject(Request.Form));
-            var msg = SendgridService.CreateMessage();
+            var msg = SendgridService.CreateMessage(Settings.FaxStation);
             try
             {
-                // Send recieved FAX image.
+                // Send received image to inbox.
                 msg = Cache.GetOrCreate<SendGridMessage>(Request.Form["FaxSid"].ToString(), _ => null) ?? msg;
                 var status = Request.Form["Status"].ToString();
-                var subject = string.Format("[{0}] Fax sent to {1}", status, Request.Form["To"].ToString());
+                msg.SetSubject(string.Format("[{0}] {1}", status, msg.Personalizations[0].Subject));
                 var text = Request.Form.Keys
                     .Select(key => string.Format("{0}: {1}", key, Request.Form[key].ToString()))
                     .Aggregate((a, b) => a + "\n" + b) + "\n\n";
-                var mediaUrl = (status == "delivered") ? new Uri(Request.Form["MediaUrl"].ToString()) : null;
-                SendgridService.SetContent(msg, subject, text, mediaUrl);
+                msg.AddContent(MimeType.Text, text + "\n\n");
+                if (status == "delivered")
+                    msg.AddAttachment(new Uri(Request.Form["MediaUrl"]));
                 Logger.LogDebug(LoggingEvents.REQUEST_TO_SENDGRID, "Message:\n{0}", JsonConvert.SerializeObject(msg));
-                var response = await SendgridService.SendAsync(msg);
+                var response = await msg.SendAsync(Settings.SendGrid);
                 Logger.LogDebug(LoggingEvents.RESULT_FROM_SENDGRID, "Response:\n{0}", JsonConvert.SerializeObject(response));
                 // Delete original media file.
-                var blobName = Path.GetFileName((new Uri(Request.Form["OriginalMediaUrl"].ToString())).LocalPath);
-                await BlobService.DeleteFile(blobName);
+                var container = await BlobService.OpenContainerAsync(Settings.Azure);
+                await container.DeleteFile(Path.GetFileName((new Uri(Request.Form["OriginalMediaUrl"])).LocalPath));
                 return Ok();
             }
             catch (Exception exn)
             {
                 Logger.LogError(LoggingEvents.ERROR_ON_OUTGOING, exn, "FAX Finished Error");
-                await SendgridService.ReplyError(msg, exn);
+                msg.SetContent(exn);
+                await msg.SendAsync(Settings.SendGrid);
                 return StatusCode(500);
             }
         }
