@@ -20,7 +20,7 @@ namespace SendgridTwilioGateway.Controllers
 
         public IncommingController(
             IOptions<Settings> settings,
-            ILogger<OutgoingController> logger)
+            ILogger<IncommingController> logger)
         {
             this.Settings = settings.Value;
             this.Logger = logger;
