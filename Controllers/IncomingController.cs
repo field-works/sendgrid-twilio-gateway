@@ -45,8 +45,8 @@ namespace SendgridTwilioGateway.Controllers
         private SendGridMessage CreateIncomingMessage()
         {
             var msg = new SendGridMessage();
-            msg.SetFrom(Settings.FaxStation.AgentAddr.AsEmailAddress());
-            msg.AddTos(Settings.FaxStation.InboxAddr.AsEmailAddresses());
+            msg.SetFrom(Settings.Station.AgentAddr.AsEmailAddress());
+            msg.AddTos(Settings.Station.InboxAddr.AsEmailAddresses());
             return msg;
         }
 
@@ -60,7 +60,7 @@ namespace SendgridTwilioGateway.Controllers
             {
                 // Send received image to inbox.
                 var from = Request.Form["From"].Any() ? Request.Form["From"].ToString() : "anonymous";
-                msg.SetFrom(string.Format("{0}@{1}", from, Settings.FaxStation.MyHostname));
+                msg.SetFrom(string.Format("{0}@{1}", from, Settings.Station.Hostname));
                 var status = Request.Form["Status"].ToString();
                 msg.SetSubject(string.Format("[{0}] Incoming call from {1}", status, from));
                 var content = Request.Form.Keys

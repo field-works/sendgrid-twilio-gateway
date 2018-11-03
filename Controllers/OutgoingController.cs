@@ -42,7 +42,7 @@ namespace SendgridTwilioGateway.Controllers
         private string ToE164(string number)
         {
             if (number.StartsWith('0'))
-                return string.Format("+{0}{1}", Settings.FaxStation.CountryCode, number.Substring(1));
+                return string.Format("+{0}{1}", Settings.Station.CountryCode, number.Substring(1));
             return number;
         }
 
@@ -61,14 +61,14 @@ namespace SendgridTwilioGateway.Controllers
                 throw new ArgumentException("Too many PDF attachments.");
 
             var matchSubject = Regex.Match(Request.Form["subject"], @"{\s*(\S+)\s*}$");
-            var quality = matchSubject.Success ? matchSubject.Groups[1].Value : Settings.FaxStation.Quality;
+            var quality = matchSubject.Success ? matchSubject.Groups[1].Value : Settings.Station.Quality;
 
             var container = await BlobService.OpenContainerAsync(Settings.Azure);
             var mediaUrl = new Uri(await container.UploadFile(files.First()));
             var originalUrl = new Uri(request.GetEncodedUrl());
             return new CreateFaxOptions(to_number, mediaUrl)
             {
-                From = Settings.FaxStation.FromNumber,
+                From = Settings.Station.Number,
                 Quality = quality.ToLower(),
                 StatusCallback = new Uri(originalUrl.GetLeftPart(UriPartial.Authority) + "/api/outgoing/sent")
             };
@@ -93,7 +93,7 @@ namespace SendgridTwilioGateway.Controllers
         private SendGridMessage CreateOutgoingMessage()
         {
             var msg = new SendGridMessage();
-            msg.SetFrom(Settings.FaxStation.AgentAddr.AsEmailAddress());
+            msg.SetFrom(Settings.Station.AgentAddr.AsEmailAddress());
             var headers = ParseHeaders(Request.Form["headers"]);
             msg.AddTos(GetReplyTo(headers).AsEmailAddresses());
             msg.AddHeader("In-Reply-To", headers["Message-Id"]);
@@ -160,7 +160,7 @@ namespace SendgridTwilioGateway.Controllers
                 msg.SetSubject(string.Format("[{0}] Outgoing call to {1}", status, Request.Form["To"]));
                 if (status == "delivered")
                 {
-                    msg.AddCcs(Settings.FaxStation.InboxAddr.AsEmailAddresses());
+                    msg.AddCcs(Settings.Station.InboxAddr.AsEmailAddresses());
                     msg.AddAttachment(new Uri(Request.Form["MediaUrl"]));
                 }
                 var content = Request.Form.Keys

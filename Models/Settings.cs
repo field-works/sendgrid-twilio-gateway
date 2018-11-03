@@ -5,7 +5,7 @@ namespace SendgridTwilioGateway.Models
         public Twilio Twilio { get; set; }
         public SendGrid SendGrid { get; set; }
         public Azure Azure { get; set; }
-        public FaxStation FaxStation { get; set; }
+        public Station Station { get; set; }
     }
 
     public class Twilio
@@ -25,11 +25,11 @@ namespace SendgridTwilioGateway.Models
         public string ContainerSid { get; set; }
     }
 
-    public class FaxStation
+    public class Station
     {
         public string CountryCode { get; set; }
-        public string FromNumber { get; set; }
-        public string MyHostname { get; set; }
+        public string Number { get; set; }
+        public string Hostname { get; set; }
         public string AgentAddr { get; set; }
         public string InboxAddr { get; set; }
 
