@@ -91,6 +91,7 @@ namespace SendgridTwilioGateway.Controllers
                 Logger.LogError(exn, "Internal error");
                 return StatusCode(500);
             }
+            Response.ContentType = "application/xml";
             return Ok();
         }
     }

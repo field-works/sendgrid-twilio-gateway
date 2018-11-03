@@ -187,6 +187,7 @@ namespace SendgridTwilioGateway.Controllers
                 Logger.LogError(exn, "FAX FinisheInternal error");
                 return StatusCode(500);
             }
+            Response.ContentType = "application/xml";
             return Ok();
         }
     }
