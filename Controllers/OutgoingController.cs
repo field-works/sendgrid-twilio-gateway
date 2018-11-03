@@ -125,7 +125,6 @@ namespace SendgridTwilioGateway.Controllers
                 var result = await FaxResource.CreateAsync(options, TwilioClient.GetRestClient());
                 Logger.LogDebug("Result from Twilio:\n{0}", JsonConvert.SerializeObject(result));
                 // Store reply message
-                msg.SetSubject(Request.Form["Subject"]);
                 Cache.Set(result.Sid, msg);
             }
             catch (ArgumentException exn)
@@ -136,8 +135,8 @@ namespace SendgridTwilioGateway.Controllers
             }
             catch (Twilio.Exceptions.TwilioException exn)
             {
-                Logger.LogError(exn, "FAX delivery failed");
-                SetErrorMessage(msg, Request.Form, "FAX delivery failed", exn);
+                Logger.LogError(exn, "Request to Twilio failed");
+                SetErrorMessage(msg, Request.Form, "Request to Twilio failed", exn);
                 await msg.SendAsync(Settings.SendGrid);
             }
             catch (Exception exn)
@@ -158,16 +157,11 @@ namespace SendgridTwilioGateway.Controllers
                 // reply received FAX image.
                 var msg = Cache.Get<SendGridMessage>(Request.Form["FaxSid"].ToString());
                 var status = Request.Form["Status"].ToString();
+                msg.SetSubject(string.Format("[{0}] Outgoing call to {1}", status, Request.Form["To"]));
                 if (status == "delivered")
                 {
-                    msg.SetSubject(string.Format("[{0}] {1}", status, msg.Personalizations[0].Subject));
                     msg.AddCcs(Settings.FaxStation.InboxAddr.AsEmailAddresses());
                     msg.AddAttachment(new Uri(Request.Form["MediaUrl"]));
-                }
-                else
-                {
-                    msg.SetSubject(string.Format("[{0}] {1}", status, Request.Form["ErrorMessage"]));
-                    msg.AddAttachment(new Uri(Request.Form["OriginalMediaUrl"]));
                 }
                 var content = Request.Form.Keys
                     .Where(key => !key.EndsWith("MediaUrl"))
@@ -184,7 +178,7 @@ namespace SendgridTwilioGateway.Controllers
             }
             catch (Exception exn)
             {
-                Logger.LogError(exn, "FAX FinisheInternal error");
+                Logger.LogError(exn, "Internal error");
                 return StatusCode(500);
             }
             Response.ContentType = "application/xml";

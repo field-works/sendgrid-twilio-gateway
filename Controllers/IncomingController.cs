@@ -15,14 +15,14 @@ namespace SendgridTwilioGateway.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class IncommingController : ControllerBase
+    public class IncomingController : ControllerBase
     {
         private readonly Settings Settings;
         private readonly ILogger Logger;
 
-        public IncommingController(
+        public IncomingController(
             IOptions<Settings> settings,
-            ILogger<IncommingController> logger)
+            ILogger<IncomingController> logger)
         {
             this.Settings = settings.Value;
             this.Logger = logger;
@@ -32,32 +32,21 @@ namespace SendgridTwilioGateway.Controllers
         [Produces("application/xml")]
         public IActionResult Post()
         {
-            Logger.LogInformation("Incomming Request:\n{0}", JsonConvert.SerializeObject(Request.Form));
+            Logger.LogInformation("Incoming Request:\n{0}", JsonConvert.SerializeObject(Request.Form));
             return Ok(new TwilioResponse
             {
                 Receive = new Receive
                 {
-                    Action = "/api/incomming/received"
+                    Action = "/api/incoming/received"
                 }
             });
         }
 
-        private SendGridMessage CreateIncommingMessage()
+        private SendGridMessage CreateIncomingMessage()
         {
             var msg = new SendGridMessage();
             msg.SetFrom(Settings.FaxStation.AgentAddr.AsEmailAddress());
             msg.AddTos(Settings.FaxStation.InboxAddr.AsEmailAddresses());
-            return msg;
-        }
-
-        private SendGridMessage CreateErrorMessage(Exception exn)
-        {
-            var msg = CreateIncommingMessage();
-            msg.SetSubject("[error] FAX receiving failed");
-            msg.AddContent(MimeType.Text, string.Format("{0}\n\n----- Recived request -----\n\n{1}",
-                    exn.ToString(), JsonConvert.SerializeObject(Request.Form)));
-            foreach (var file in Request.Form.Files)
-                msg.AddAttachmentAsync(file.FileName, file.OpenReadStream());
             return msg;
         }
 
@@ -66,14 +55,14 @@ namespace SendgridTwilioGateway.Controllers
         public async Task<IActionResult> Received()
         {
             Logger.LogInformation("Received Request:\n{0}", JsonConvert.SerializeObject(Request.Form));
-            var msg = CreateIncommingMessage();
+            var msg = CreateIncomingMessage();
             try
             {
                 // Send received image to inbox.
                 var from = Request.Form["From"].Any() ? Request.Form["From"].ToString() : "anonymous";
                 msg.SetFrom(string.Format("{0}@{1}", from, Settings.FaxStation.MyHostname));
                 var status = Request.Form["Status"].ToString();
-                msg.SetSubject(string.Format("[{0}] Received FAX from {1}", status, from));
+                msg.SetSubject(string.Format("[{0}] Incoming call from {1}", status, from));
                 var content = Request.Form.Keys
                     .Where(key => !key.EndsWith("MediaUrl"))
                     .OrderBy(key => key)
