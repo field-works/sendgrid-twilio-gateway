@@ -105,8 +105,6 @@ namespace SendgridTwilioGateway.Controllers
             msg.SetSubject(string.Format("[error] {0}", subject));
             msg.AddContent(MimeType.Text, string.Format("{0}\n\n----- Original message -----\n\n{1}\n\n{2}",
                     exn.ToString(), form["headers"], form["text"]));
-            foreach (var file in form.Files)
-                msg.AddAttachmentAsync(file.FileName, file.OpenReadStream());
         }
 
         [HttpPost]
