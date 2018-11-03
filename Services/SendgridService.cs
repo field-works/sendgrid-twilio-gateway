@@ -24,13 +24,6 @@ namespace SendgridTwilioGateway.Services
             foreach (var cc in ccs) msg.AddCc(cc);
         }
 
-        public static SendGridMessage CreateMessage(FaxStation fax)
-        {
-            var msg = new SendGridMessage() { From = fax.FromAddr.AsEmailAddress() };
-            msg.AddTos(fax.InboxAddr.AsEmailAddresses());
-            return msg;
-        }
-
         private static async Task<HttpResponseMessage> GetRemoteFile(string uri)
         {
             var client = new HttpClient();
