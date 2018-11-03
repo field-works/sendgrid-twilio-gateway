@@ -29,7 +29,7 @@ namespace SendgridTwilioGateway.Models
     {
         public string CountryCode { get; set; }
         public string Number { get; set; }
-        public string Hostname { get; set; }
+        public string DomainName { get; set; }
         public string AgentAddr { get; set; }
         public string InboxAddr { get; set; }
 

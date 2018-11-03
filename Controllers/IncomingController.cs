@@ -60,7 +60,7 @@ namespace SendgridTwilioGateway.Controllers
             {
                 // Send received image to inbox.
                 var from = Request.Form["From"].Any() ? Request.Form["From"].ToString() : "anonymous";
-                msg.SetFrom(string.Format("{0}@{1}", from, Settings.Station.Hostname));
+                msg.SetFrom(string.Format("{0}@{1}", from, Settings.Station.DomainName));
                 var status = Request.Form["Status"].ToString();
                 msg.SetSubject(string.Format("[{0}] Incoming call from {1}", status, from));
                 var content = Request.Form.Keys
