@@ -13,17 +13,6 @@ namespace SendgridTwilioGateway.Services
 {
     public static class SendgridService
     {
-       public static void AddAddr(
-           SendGridMessage msg,
-           EmailAddress from,
-           IEnumerable<EmailAddress> tos,
-           IEnumerable<EmailAddress> ccs)
-        {
-            msg.SetFrom(from);
-            msg.AddTos(tos.ToList());
-            foreach (var cc in ccs) msg.AddCc(cc);
-        }
-
         private static async Task<HttpResponseMessage> GetRemoteFile(string uri)
         {
             var client = new HttpClient();
@@ -42,12 +31,6 @@ namespace SendgridTwilioGateway.Services
                     Path.GetFileName(uri.LocalPath),
                     Convert.ToBase64String(response.Content.ReadAsByteArrayAsync().Result),
                     response.Content.Headers.ContentType.MediaType);
-        }
-
-        public static void SetContent(this SendGridMessage msg, Exception exn)
-        {
-            msg.SetSubject(string.Format("[error] {0}", exn.Message));
-            msg.AddContent(MimeType.Text, exn.ToString());
         }
 
         public static async Task<Response> SendAsync(this SendGridMessage msg, Models.SendGrid settings)
