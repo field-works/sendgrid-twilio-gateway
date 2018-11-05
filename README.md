@@ -68,6 +68,8 @@ FAX送信時にPDFファイルを一時保存するためのストレージア�
 サイト固有の設定を追加します。
 
     Settings:SendGrid:ApiKey（必須） - SendGridで作成したAPIキー
+    Settings:SendGrid:WhiteList（既定値：.*） - FAXの送信を許可するメールアドレスのパターン（正規表現）
+       設定例： ".+@(example.com|example.co.jp)$"
 
     Settings:Twilio:Number（必須） - Twilioで購入した電話番番号（E.164形式）
     Settings:Twilio:UserName（必須） - Twilioで作成したAPIキーのSID
