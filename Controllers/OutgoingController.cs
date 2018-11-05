@@ -21,13 +21,6 @@ using Twilio.Rest.Fax.V1;
 
 namespace SendgridTwilioGateway.Controllers
 {
-    public class Envelope
-    {
-        public string From { get; set; }
-
-        public IEnumerable<string> To { get; set; }
-    }
-
     [Route("api/[controller]")]
     [ApiController]
     public class OutgoingController : ControllerBase
