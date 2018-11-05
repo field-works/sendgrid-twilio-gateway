@@ -17,6 +17,7 @@ namespace SendgridTwilioGateway.Models
     public class SendGrid
     {
         public string ApiKey { get; set; }
+        public string WhiteList { get; set; }
     }
 
     public class Azure

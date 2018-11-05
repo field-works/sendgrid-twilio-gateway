@@ -107,6 +107,17 @@ namespace SendgridTwilioGateway.Controllers
                     exn.ToString(), form["headers"], form["text"]));
         }
 
+        private void AuthorityCheck()
+        {
+            if (!string.IsNullOrEmpty(Settings.SendGrid.WhiteList))
+            {
+                var envelope = JsonConvert.DeserializeObject<Envelope>(Request.Form["envelope"]);
+                var m = Regex.Match(envelope.From, Settings.SendGrid.WhiteList);
+                if (!m.Success)
+                    throw new UnauthorizedAccessException("Unknown address: " + envelope.From);
+            }
+        }
+
         [HttpPost]
         public async Task<IActionResult> Post()
         {
@@ -114,8 +125,7 @@ namespace SendgridTwilioGateway.Controllers
             var msg = CreateOutgoingMessage();
             try
             {
-                // TODO: check from domain
-                dynamic envelope = JsonConvert.DeserializeObject(Request.Form["envelope"]);
+                AuthorityCheck();
                 // Send FAX
                 TwilioClient.Init(Settings.Twilio.UserName, Settings.Twilio.Password);
                 var options = await ParseRequest(Request);
@@ -124,6 +134,11 @@ namespace SendgridTwilioGateway.Controllers
                 Logger.LogDebug("Result from Twilio:\n{0}", JsonConvert.SerializeObject(result));
                 // Store reply message
                 Cache.Set(result.Sid, msg);
+            }
+            catch (UnauthorizedAccessException exn)
+            {
+                Logger.LogError(exn, "Unauthorized request");
+                return Ok();
             }
             catch (ArgumentException exn)
             {
