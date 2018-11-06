@@ -55,10 +55,10 @@ namespace SendgridTwilioGateway.Controllers
         public async Task<IActionResult> Received()
         {
             Logger.LogInformation("Received Request:\n{0}", JsonConvert.SerializeObject(Request.Form));
-            var msg = CreateIncomingMessage();
             try
             {
                 // Send received image to inbox.
+                var msg = CreateIncomingMessage();
                 var from = Request.Form["From"].Any() ? Request.Form["From"].ToString() : "anonymous";
                 msg.SetFrom(string.Format("{0}@{1}", from, Settings.Station.DomainName));
                 var status = Request.Form["Status"].ToString();

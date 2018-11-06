@@ -83,28 +83,33 @@ namespace SendgridTwilioGateway.Controllers
                 .ToDictionary(g => g.Key, g => string.Join("\n", g.Select(kv => kv[1].Trim())), StringComparer.OrdinalIgnoreCase);
         }
 
-        private string GetReplyTo(IDictionary<string, string> headers)
+        private static string GetReplyTo(IDictionary<string, string> headers)
         {
             if (headers.ContainsKey("Reply-To"))
                 return headers["Reply-To"];
             return headers["From"];
         }
 
-        private SendGridMessage CreateOutgoingMessage()
+        private static SendGridMessage CreateReplyMessage(Settings settings, IFormCollection form)
         {
             var msg = new SendGridMessage();
-            msg.SetFrom(Settings.Station.AgentAddr.AsEmailAddress());
-            var headers = ParseHeaders(Request.Form["headers"]);
+            msg.SetFrom(settings.Station.AgentAddr.AsEmailAddress());
+            var headers = ParseHeaders(form["headers"]);
             msg.AddTos(GetReplyTo(headers).AsEmailAddresses());
             msg.AddHeader("In-Reply-To", headers["Message-Id"]);
             return msg;
         }
 
-        private static void SetErrorMessage(SendGridMessage msg, IFormCollection form, string subject, Exception exn)
+        private static SendGridMessage CreateErrorMessage(Settings settings, IFormCollection form, string subject, Exception exn)
         {
+            var msg = new SendGridMessage();
+            msg.SetFrom(settings.Station.AgentAddr.AsEmailAddress());
+            var envelope = JsonConvert.DeserializeObject<Envelope>(form["envelope"]);
+            msg.AddTo(envelope.From.AsEmailAddress());
             msg.SetSubject(string.Format("[error] {0}", subject));
             msg.AddContent(MimeType.Text, string.Format("{0}\n\n----- Original message -----\n\n{1}\n\n{2}",
                     exn.ToString(), form["headers"], form["text"]));
+            return msg;
         }
 
         private void AuthorityCheck()
@@ -122,7 +127,6 @@ namespace SendgridTwilioGateway.Controllers
         public async Task<IActionResult> Post()
         {
             Logger.LogInformation("Outgoing Request:\n{0}", JsonConvert.SerializeObject(Request.Form));
-            var msg = CreateOutgoingMessage();
             try
             {
                 AuthorityCheck();
@@ -133,23 +137,24 @@ namespace SendgridTwilioGateway.Controllers
                 var result = await FaxResource.CreateAsync(options, TwilioClient.GetRestClient());
                 Logger.LogDebug("Result from Twilio:\n{0}", JsonConvert.SerializeObject(result));
                 // Store reply message
-                Cache.Set(result.Sid, msg);
+                Cache.Set(result.Sid, CreateReplyMessage(Settings, Request.Form));
             }
             catch (UnauthorizedAccessException exn)
             {
                 Logger.LogError(exn, "Unauthorized request");
+                // No reply
                 return Ok();
             }
             catch (ArgumentException exn)
             {
-                Logger.LogError(exn, "Bad request");
-                SetErrorMessage(msg, Request.Form, "Bad request", exn);
+                Logger.LogWarning(exn, "Bad request");
+                var msg = CreateErrorMessage(Settings, Request.Form, "Bad request", exn);
                 await msg.SendAsync(Settings.SendGrid);
             }
             catch (Twilio.Exceptions.TwilioException exn)
             {
                 Logger.LogError(exn, "Request to Twilio failed");
-                SetErrorMessage(msg, Request.Form, "Request to Twilio failed", exn);
+                var msg = CreateErrorMessage(Settings, Request.Form, "Request to Twilio failed", exn);
                 await msg.SendAsync(Settings.SendGrid);
             }
             catch (Exception exn)
